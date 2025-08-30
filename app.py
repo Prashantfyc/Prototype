@@ -1,7 +1,8 @@
 # app.py
 """
-Medico: Your Digital Mental Health Companion (v3.0 - Advanced RAG)
-- Upgraded to use embeddings for smarter, meaning-based knowledge retrieval.
+Medico: Your Digital Mental Health Companion (v4.0 - New Features)
+- Added simple user login to privatize data.
+- Added a new 'Guided Exercises' page.
 """
 import os
 import re
@@ -18,11 +19,6 @@ import numpy as np
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-# --- File paths for data storage ---
-LOG_FILE = "flagged_chats.csv"
-MOOD_LOG_FILE = "mood_log.csv"
-JOURNAL_FILE = "journal_entries.csv"
-
 # --- Gemini Integration ---
 model = genai.GenerativeModel('gemini-1.5-flash')
 SYSTEM_PROMPT = """You are Medico, a supportive, empathetic, and non-judgmental digital companion from the university's wellness department. Your purpose is to provide a safe and encouraging space for students.
@@ -36,7 +32,7 @@ Your role is to:
 - If you detect a crisis (mentions of self-harm, suicide, etc.), immediately trigger the safety protocol by providing the predefined crisis message and disengaging from further conversation on that topic.
 """
 
-# --- New: Advanced Knowledge Base (RAG) using Embeddings ---
+# --- Advanced Knowledge Base (RAG) ---
 KNOWLEDGE_DOCUMENTS = [
     {
         "title": "On-Campus Doctor",
@@ -64,46 +60,36 @@ KNOWLEDGE_DOCUMENTS = [
     }
 ]
 
-# --- New: Embedding and Retrieval Functions ---
+# --- Embedding and Retrieval Functions ---
 def find_best_match(query, documents):
-    """Finds the most relevant document from the knowledge base using embeddings."""
     try:
         query_embedding = genai.embed_content(model='models/embedding-001',
                                               content=query,
                                               task_type="RETRIEVAL_QUERY")["embedding"]
-
         doc_embeddings = genai.embed_content(model='models/embedding-001',
                                              content=[doc['content'] for doc in documents],
                                              task_type="RETRIEVAL_DOCUMENT")["embedding"]
-
         products = np.dot(np.array(doc_embeddings), np.array(query_embedding))
         index = np.argmax(products)
-        
         CONFIDENCE_THRESHOLD = 0.65
         return documents[index] if products[index] > CONFIDENCE_THRESHOLD else None
-
     except Exception as e:
         st.error(f"Error finding relevant information: {e}")
         return None
 
 def get_gemini_response(user_text, chat_history):
-    """Generates a response from Gemini, including context and conversation history."""
     relevant_doc = find_best_match(user_text, KNOWLEDGE_DOCUMENTS)
-    
     context = ""
     if relevant_doc:
         context = f"Relevant Info from '{relevant_doc['title']}': {relevant_doc['content']}"
-
     history_formatted = ""
     for message in chat_history[-4:]:
         role = "User" if message["role"] == "user" else "Medico"
         history_formatted += f'{role}: {message["content"]}\n'
-
     prompt = (f"{SYSTEM_PROMPT}\n\n"
               f"{context}\n\n"
               f"CONVERSATION HISTORY (summary):\n{history_formatted}\n\n"
               f"NEW MESSAGE:\nUser: {user_text}\n\nMedico:")
-
     try:
         response = model.generate_content(prompt)
         return response.text
@@ -121,6 +107,8 @@ def detect_crisis(text: str) -> bool:
 def log_event(filename, data):
     try:
         df = pd.DataFrame([data])
+        # Create directory if it doesn't exist
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
         df.to_csv(filename, mode='a', header=not os.path.exists(filename), index=False)
     except Exception as e:
         st.error(f"Failed to log event: {e}")
@@ -131,69 +119,60 @@ st.set_page_config(page_title="Medico", layout="wide", page_icon="🩺")
 st.markdown("""
 <style>
     /* --- Base App Style --- */
-    .stApp {
-        background-color: #1E1E2E; /* Dark blue-gray background */
-        color: #CDD6F4; /* Light lavender text */
-    }
-    h1, h2, h3, h4, h5, h6 {
-        color: #CDD6F4;
-    }
-
+    .stApp { background-color: #1E1E2E; color: #CDD6F4; }
+    h1, h2, h3, h4, h5, h6 { color: #CDD6F4; }
     /* --- Sidebar Style --- */
-    [data-testid="stSidebar"] {
-        background-color: #181825; /* Even darker sidebar */
-        border-right: 1px solid #313244;
-    }
-    
+    [data-testid="stSidebar"] { background-color: #181825; border-right: 1px solid #313244; }
     /* --- Chat Bubbles Style --- */
-    .st-emotion-cache-1c7y2kd { /* User chat bubble */
-        background-color: #89B4FA; /* User bubble blue */
-        border-radius: 20px 20px 5px 20px;
-        color: #1E1E2E; /* Dark text on light bubble */
-        align-self: flex-end; /* Align to the right */
-        max-width: 70%;
-    }
-    .st-emotion-cache-4k6c3l { /* Bot chat bubble */
-        background-color: #313244; /* Bot bubble gray */
-        border-radius: 20px 20px 20px 5px;
-        color: #CDD6F4; /* Light text on dark bubble */
-        align-self: flex-start; /* Align to the left */
-        max-width: 70%;
-    }
-
+    .st-emotion-cache-1c7y2kd { background-color: #89B4FA; border-radius: 20px 20px 5px 20px; color: #1E1E2E; align-self: flex-end; max-width: 70%; }
+    .st-emotion-cache-4k6c3l { background-color: #313244; border-radius: 20px 20px 20px 5px; color: #CDD6F4; align-self: flex-start; max-width: 70%; }
     /* --- Chat Input Box Style --- */
-    [data-testid="stChatInput"] {
-        background-color: #181825;
-        border-top: 1px solid #313244;
-    }
-    [data-testid="stChatInput"] input {
-        color: #CDD6F4;
-    }
-
+    [data-testid="stChatInput"] { background-color: #181825; border-top: 1px solid #313244; }
+    [data-testid="stChatInput"] input { color: #CDD6F4; }
     /* --- Button & Widget Style --- */
-    .stButton>button {
-        background-color: #89B4FA;
-        color: #1E1E2E;
-        border: none;
-        border-radius: 8px;
-    }
-    .stButton>button:hover {
-        background-color: #74C7EC;
-        color: #1E1E2E;
-    }
-
+    .stButton>button { background-color: #89B4FA; color: #1E1E2E; border: none; border-radius: 8px; }
+    .stButton>button:hover { background-color: #74C7EC; color: #1E1E2E; }
 </style>
 """, unsafe_allow_html=True)
 
+# --- Main App Logic ---
+
+# Initialize session state for login
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+if 'username' not in st.session_state:
+    st.session_state.username = ''
+
+# --- Login Page ---
+if not st.session_state.logged_in:
+    st.title("Welcome to Medico 🩺")
+    st.write("Your personal mental health companion.")
+    
+    with st.form("login_form"):
+        username = st.text_input("Please enter your name to begin")
+        submitted = st.form_submit_button("Start Session")
+        if submitted and username:
+            st.session_state.logged_in = True
+            st.session_state.username = username
+            st.rerun()
+    st.stop() # Stop the app from running further until logged in
+
+# --- Main Application (after login) ---
+
+# Define user-specific file paths
+USER_DATA_DIR = f"user_data/{st.session_state.username}"
+LOG_FILE = f"{USER_DATA_DIR}/flagged_chats.csv"
+MOOD_LOG_FILE = f"{USER_DATA_DIR}/mood_log.csv"
+JOURNAL_FILE = f"{USER_DATA_DIR}/journal_entries.csv"
 
 # --- Sidebar ---
 with st.sidebar:
-    st.title("🩺 Medico")
+    st.title(f"Hi, {st.session_state.username}!")
     st.write("Your friendly mental health companion.")
 
     page = option_menu(
-        None, ["Chat", "Journal", "Mood Tracker", "Resources"],
-        icons=['chat-dots-fill', 'pencil-square', 'graph-up-arrow', 'info-circle-fill'],
+        None, ["Chat", "Journal", "Mood Tracker", "Guided Exercises", "Resources"],
+        icons=['chat-dots-fill', 'pencil-square', 'graph-up-arrow', 'activity', 'info-circle-fill'],
         menu_icon="cast", default_index=0,
         styles={
             "container": {"padding": "0!important", "background-color": "#181825"},
@@ -202,13 +181,17 @@ with st.sidebar:
             "nav-link-selected": {"background-color": "#313244", "color": "#89B4FA"},
         }
     )
+    if st.button("Logout"):
+        st.session_state.logged_in = False
+        st.session_state.username = ''
+        st.rerun()
 
-# --- Main Content Area ---
+
+# --- Page Content ---
 if page == "Chat":
     st.header("How are you feeling today?")
-    
     if "messages" not in st.session_state:
-        st.session_state.messages = [{"role": "assistant", "content": "Hi there! I'm Medico. I'm here to offer support and a listening ear. What's on your mind?"}]
+        st.session_state.messages = [{"role": "assistant", "content": f"Hi {st.session_state.username}! I'm Medico. What's on your mind?"}]
 
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
@@ -263,7 +246,7 @@ elif page == "Mood Tracker":
     st.header("📊 Mood Tracker")
     st.write("Checking in with yourself is a great habit. How are you feeling today?")
     
-    mood_score = st.slider("Rate your mood (1 = Very Down, 10 = Excellent)", 1, 10, 5, label_visibility="collapsed")
+    mood_score = st.slider("Rate your mood (1 = Very Down, 10 = Excellent)", 1, 10, 5)
     if st.button("Log My Mood"):
         log_event(MOOD_LOG_FILE, {"timestamp": datetime.utcnow().isoformat(), "mood_score": mood_score})
         st.success(f"Mood logged as {mood_score}/10. Keep it up!")
@@ -280,11 +263,23 @@ elif page == "Mood Tracker":
         else:
             st.write("No mood data yet. Log your mood to see your trend!")
 
+elif page == "Guided Exercises":
+    st.header("🧘 Guided Exercises")
+    st.write("Take a moment for yourself with these short, guided exercises.")
+
+    st.subheader("5-Minute Calming Breathing Exercise")
+    st.video("https://www.youtube.com/watch?v=inpok4MKVLM")
+
+    st.subheader("10-Minute Guided Mindfulness Meditation")
+    st.video("https://www.youtube.com/watch?v=O-6f5wQXSu8")
+    
+    st.subheader("Progressive Muscle Relaxation")
+    st.video("https://www.youtube.com/watch?v=1nZEdA_pKO0")
+
 elif page == "Resources":
     st.header("📚 Wellness Resources")
     st.write("Here are some university-approved resources to support you.")
     
-    # Updated to loop through the new KNOWLEDGE_DOCUMENTS structure
     for doc in KNOWLEDGE_DOCUMENTS:
         st.subheader(doc["title"])
         if "Emergency" in doc["title"]:
@@ -293,6 +288,5 @@ elif page == "Resources":
             st.info(doc["content"])
         else:
             st.success(doc["content"])
-
 
 st.caption("Disclaimer: Medico is an AI prototype for hackathon demonstration and is not a substitute for professional medical advice.")
