@@ -1,5 +1,7 @@
 # app.py
 """
+Medico: Your Digital Mental Health Companion (v3.0 - Advanced RAG)
+- Upgraded to use embeddings for smarter, meaning-based knowledge retrieval.
 """
 import os
 import re
@@ -10,6 +12,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 import google.generativeai as genai
 from streamlit_option_menu import option_menu
+import numpy as np
 
 # --- Configuration & Setup ---
 load_dotenv()
@@ -33,40 +36,71 @@ Your role is to:
 - If you detect a crisis (mentions of self-harm, suicide, etc.), immediately trigger the safety protocol by providing the predefined crisis message and disengaging from further conversation on that topic.
 """
 
-# --- Knowledge Base (RAG) ---
-# KNOWLEDGE_BASE section to be updated in app.py
+# --- New: Advanced Knowledge Base (RAG) using Embeddings ---
+KNOWLEDGE_DOCUMENTS = [
+    {
+        "title": "On-Campus Doctor",
+        "content": "The on-campus doctor is available at the University Health Center. Details: Dr. Anya Sharma (General Physician), Location: Health & Wellness Building, Ground Floor, Room 102. Phone: +91-ZZZZZZZZZZ. Hours: Mon-Fri 10:00-16:00. An appointment is recommended."
+    },
+    {
+        "title": "Campus Counseling Center",
+        "content": "Our Campus Counseling Center is a free and confidential resource for students needing to talk to a professional about stress, anxiety, or feeling down. Location: Health & Wellness Building, Room 204. Phone: +91-XXXXXXXXXX. They offer individual sessions, group therapy, and workshops."
+    },
+    {
+        "title": "Emergency Services",
+        "content": "If you or someone you know is in immediate danger or a crisis, please don't wait. Call the National Emergency Helpline at 112 or the Campus Security emergency line at +91-YYYYYYYYY. Help is available 24/7."
+    },
+    {
+        "title": "Exam Stress Tips",
+        "content": "Feeling overwhelmed by exams is normal. Techniques like the Pomodoro method (study for 25 mins, break for 5), staying hydrated, getting 7-8 hours of sleep, and light exercise can help manage pressure and improve focus."
+    },
+    {
+        "title": "Dealing with Loneliness",
+        "content": "Feeling lonely or isolated is a common experience. Consider joining a student club that matches your interests, attending campus events, or volunteering. The Student Life office has a full list of clubs. Small steps can make a big difference."
+    },
+    {
+        "title": "Self-Care Strategies",
+        "content": "Self-care is vital for well-being. Try simple things like a 5-minute guided meditation, journaling your thoughts, going for a walk, or listening to calming music. These small actions can have a big impact on your mental state."
+    }
+]
 
-KNOWLEDGE_BASE = {
-    "doctor": "The on-campus doctor is available at the University Health Center. Here are the dummy details: Dr. Anya Sharma (General Physician), Location: Health & Wellness Building, Ground Floor, Room 102. Phone: +91-ZZZZZZZZZZ. Hours: Mon-Fri 10:00-16:00. An appointment is recommended.",
-    "counseling": "Our Campus Counseling Center is a free and confidential resource. You can find them in the Health & Wellness Building, Room 204. Phone: +91-XXXXXXXXXX. Email: counseling@university.edu. They offer individual sessions, group therapy, and workshops. It's a brave step to reach out for support.",
-    "emergency": "If you or someone you know is in immediate danger, please don't wait. Call the National Emergency Helpline at 112 or the Campus Security emergency line at +91-YYYYYYYYY. Help is available 24/7.",
-    "exam_stress": "Feeling stressed about exams is completely normal. Remember to use the Pomodoro Technique (study for 25 mins, break for 5 mins). Stay hydrated, get at least 7-8 hours of sleep, and do some light exercise. You can also form study groups. You've got this!",
-    "loneliness": "Feeling lonely is a common experience at university. Consider joining a student club that matches your interests, attending campus events, or volunteering. The Student Life office has a full list of clubs. Sometimes just a small step can make a big difference.",
-    "self_care": "Self-care is vital for your well-being. Try simple things like a 5-minute guided meditation (you can find many on YouTube), journaling your thoughts, going for a walk in nature, or listening to a calming playlist. Small actions can have a big impact.",
-    "Check up":"The on-campus doctor is available at the University Health Center. Here are the dummy details: Dr. Anya Sharma (General Physician), Location: Health & Wellness Building, Ground Floor, Room 102. Phone: +91-ZZZZZZZZZZ. Hours: Mon-Fri 10:00-16:00. An appointment is recommended."
-}
+# --- New: Embedding and Retrieval Functions ---
+def find_best_match(query, documents):
+    """Finds the most relevant document from the knowledge base using embeddings."""
+    try:
+        query_embedding = genai.embed_content(model='models/embedding-001',
+                                              content=query,
+                                              task_type="RETRIEVAL_QUERY")["embedding"]
 
-# --- Core Functions ---
-# Find this function in your app.py file and replace it with this new version.
+        doc_embeddings = genai.embed_content(model='models/embedding-001',
+                                             content=[doc['content'] for doc in documents],
+                                             task_type="RETRIEVAL_DOCUMENT")["embedding"]
+
+        products = np.dot(np.array(doc_embeddings), np.array(query_embedding))
+        index = np.argmax(products)
+        
+        CONFIDENCE_THRESHOLD = 0.65
+        return documents[index] if products[index] > CONFIDENCE_THRESHOLD else None
+
+    except Exception as e:
+        st.error(f"Error finding relevant information: {e}")
+        return None
 
 def get_gemini_response(user_text, chat_history):
     """Generates a response from Gemini, including context and conversation history."""
-    # Simple keyword-based retrieval for the knowledge base
+    relevant_doc = find_best_match(user_text, KNOWLEDGE_DOCUMENTS)
+    
     context = ""
-    for key, value in KNOWLEDGE_BASE.items():
-        if key in user_text.lower():
-            context += f"Relevant Info: {value}\n"
+    if relevant_doc:
+        context = f"Relevant Info from '{relevant_doc['title']}': {relevant_doc['content']}"
 
-    # Format the chat history for the prompt
     history_formatted = ""
-    # We take the last 4 messages (2 user, 2 assistant) to keep the prompt concise
     for message in chat_history[-4:]:
         role = "User" if message["role"] == "user" else "Medico"
         history_formatted += f'{role}: {message["content"]}\n'
 
-    # The new prompt includes the conversation history
     prompt = (f"{SYSTEM_PROMPT}\n\n"
-              f"RELEVANT INFO:\n{context}\n\n"
+              f"{context}\n\n"
               f"CONVERSATION HISTORY (summary):\n{history_formatted}\n\n"
               f"NEW MESSAGE:\nUser: {user_text}\n\nMedico:")
 
@@ -77,6 +111,7 @@ def get_gemini_response(user_text, chat_history):
         st.error(f"An error occurred with the AI model: {e}")
         return "I'm having a little trouble connecting right now. Please try again in a moment."
 
+# --- Core Functions (Unchanged) ---
 CRISIS_KEYWORDS = ["kill myself", "end my life", "want to die", "suicide", "hurt myself", "self harm"]
 
 def detect_crisis(text: str) -> bool:
@@ -109,9 +144,6 @@ st.markdown("""
         background-color: #181825; /* Even darker sidebar */
         border-right: 1px solid #313244;
     }
-    [data-testid="stSidebar"] .st-emotion-cache-1g6h025 { /* Title in sidebar */
-        color: #CDD6F4;
-    }
     
     /* --- Chat Bubbles Style --- */
     .st-emotion-cache-1c7y2kd { /* User chat bubble */
@@ -136,20 +168,6 @@ st.markdown("""
     }
     [data-testid="stChatInput"] input {
         color: #CDD6F4;
-    }
-
-    /* --- Main Container & Tabs --- */
-    .stTabs [data-baseweb="tab-list"] {
-        background-color: #1E1E2E;
-        border-bottom: 1px solid #313244;
-    }
-    .stTabs [data-baseweb="tab"] {
-        background-color: transparent;
-        color: #CDD6F4;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #313244;
-        color: #89B4FA; /* Blue for selected tab text */
     }
 
     /* --- Button & Widget Style --- */
@@ -266,12 +284,15 @@ elif page == "Resources":
     st.header("📚 Wellness Resources")
     st.write("Here are some university-approved resources to support you.")
     
-    st.subheader("On-Campus Support")
-    st.info(f"**Campus Counseling Center:**\n{KNOWLEDGE_BASE['counseling']}")
-    st.error(f"**Emergency Contacts:**\n{KNOWLEDGE_BASE['emergency']}")
+    # Updated to loop through the new KNOWLEDGE_DOCUMENTS structure
+    for doc in KNOWLEDGE_DOCUMENTS:
+        st.subheader(doc["title"])
+        if "Emergency" in doc["title"]:
+            st.error(doc["content"])
+        elif "Counseling" in doc["title"] or "Doctor" in doc["title"]:
+            st.info(doc["content"])
+        else:
+            st.success(doc["content"])
 
-    st.subheader("Self-Help Guides")
-    st.success(f"**Tips for Exam Stress:**\n{KNOWLEDGE_BASE['exam_stress']}")
-    st.warning(f"**Dealing with Loneliness:**\n{KNOWLEDGE_BASE['loneliness']}")
 
 st.caption("Disclaimer: Medico is an AI prototype for hackathon demonstration and is not a substitute for professional medical advice.")
