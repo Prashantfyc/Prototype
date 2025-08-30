@@ -41,7 +41,8 @@ KNOWLEDGE_BASE = {
     "emergency": "If you or someone you know is in immediate danger, please don't wait. Call the National Emergency Helpline at 112 or the Campus Security emergency line at +91-YYYYYYYYY. Help is available 24/7.",
     "exam_stress": "Feeling stressed about exams is completely normal. Remember to use the Pomodoro Technique (study for 25 mins, break for 5 mins). Stay hydrated, get at least 7-8 hours of sleep, and do some light exercise. You can also form study groups. You've got this!",
     "loneliness": "Feeling lonely is a common experience at university. Consider joining a student club that matches your interests, attending campus events, or volunteering. The Student Life office has a full list of clubs. Sometimes just a small step can make a big difference.",
-    "self_care": "Self-care is vital for your well-being. Try simple things like a 5-minute guided meditation (you can find many on YouTube), journaling your thoughts, going for a walk in nature, or listening to a calming playlist. Small actions can have a big impact."
+    "self_care": "Self-care is vital for your well-being. Try simple things like a 5-minute guided meditation (you can find many on YouTube), journaling your thoughts, going for a walk in nature, or listening to a calming playlist. Small actions can have a big impact.",
+    "Check up":"The on-campus doctor is available at the University Health Center. Here are the dummy details: Dr. Anya Sharma (General Physician), Location: Health & Wellness Building, Ground Floor, Room 102. Phone: +91-ZZZZZZZZZZ. Hours: Mon-Fri 10:00-16:00. An appointment is recommended."
 }
 
 # --- Core Functions ---
