@@ -1,8 +1,5 @@
 # app.py
 """
-Medico: Your Digital Mental Health Companion (v2.0 - UI Overhaul)
-- Inspired by the MediTalk Dribbble design
-- Powered by Google Gemini
 """
 import os
 import re
