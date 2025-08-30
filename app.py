@@ -47,12 +47,29 @@ KNOWLEDGE_BASE = {
 }
 
 # --- Core Functions ---
-def get_gemini_response(user_text):
+# Find this function in your app.py file and replace it with this new version.
+
+def get_gemini_response(user_text, chat_history):
+    """Generates a response from Gemini, including context and conversation history."""
+    # Simple keyword-based retrieval for the knowledge base
     context = ""
     for key, value in KNOWLEDGE_BASE.items():
         if key in user_text.lower():
             context += f"Relevant Info: {value}\n"
-    prompt = f"{SYSTEM_PROMPT}\n\n{context}\n\nUser: {user_text}\n\nMedico:"
+
+    # Format the chat history for the prompt
+    history_formatted = ""
+    # We take the last 4 messages (2 user, 2 assistant) to keep the prompt concise
+    for message in chat_history[-4:]:
+        role = "User" if message["role"] == "user" else "Medico"
+        history_formatted += f'{role}: {message["content"]}\n'
+
+    # The new prompt includes the conversation history
+    prompt = (f"{SYSTEM_PROMPT}\n\n"
+              f"RELEVANT INFO:\n{context}\n\n"
+              f"CONVERSATION HISTORY (summary):\n{history_formatted}\n\n"
+              f"NEW MESSAGE:\nUser: {user_text}\n\nMedico:")
+
     try:
         response = model.generate_content(prompt)
         return response.text
@@ -199,7 +216,7 @@ if page == "Chat":
         else:
             with st.chat_message("assistant"):
                 with st.spinner("Medico is thinking..."):
-                    response = get_gemini_response(prompt)
+                    response = get_gemini_response(prompt, st.session_state.messages)
                     st.markdown(response)
             st.session_state.messages.append({"role": "assistant", "content": response})
 
