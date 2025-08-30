@@ -1,9 +1,5 @@
 # app.py
-"""
-Medico: Your Digital Mental Health Companion (v2.0 - UI Overhaul)
-- Inspired by the MediTalk Dribbble design
-- Powered by Google Gemini
-"""
+
 import os
 import re
 import pandas as pd
@@ -37,7 +33,10 @@ Your role is to:
 """
 
 # --- Knowledge Base (RAG) ---
+# KNOWLEDGE_BASE section to be updated in app.py
+
 KNOWLEDGE_BASE = {
+    "doctor": "The on-campus doctor is available at the University Health Center. Here are the dummy details: Dr. Anya Sharma (General Physician), Location: Health & Wellness Building, Ground Floor, Room 102. Phone: +91-ZZZZZZZZZZ. Hours: Mon-Fri 10:00-16:00. An appointment is recommended.",
     "counseling": "Our Campus Counseling Center is a free and confidential resource. You can find them in the Health & Wellness Building, Room 204. Phone: +91-XXXXXXXXXX. Email: counseling@university.edu. They offer individual sessions, group therapy, and workshops. It's a brave step to reach out for support.",
     "emergency": "If you or someone you know is in immediate danger, please don't wait. Call the National Emergency Helpline at 112 or the Campus Security emergency line at +91-YYYYYYYYY. Help is available 24/7.",
     "exam_stress": "Feeling stressed about exams is completely normal. Remember to use the Pomodoro Technique (study for 25 mins, break for 5 mins). Stay hydrated, get at least 7-8 hours of sleep, and do some light exercise. You can also form study groups. You've got this!",
