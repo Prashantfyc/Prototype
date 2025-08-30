@@ -1,5 +1,6 @@
 streamlit
 google-generativeai
-python-dotenv
 pandas
 plotly-express
+python-dotenv
+streamlit-option-menu
