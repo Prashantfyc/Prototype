@@ -1,7 +1,7 @@
 # app.py
 """
-Medico: Your Digital Mental Health Companion (v11.0 - Gemini API Final)
-- Configured to run exclusively on the Google Gemini API.
+Medico: Your Digital Mental Health Companion (v11.1 - Added Contributors)
+- Added a list of project contributors to the sidebar.
 """
 import os
 import re
@@ -26,9 +26,8 @@ try:
     genai.configure(api_key=GEMINI_API_KEY)
     gemini_model = genai.GenerativeModel('gemini-1.5-flash')
 except (AttributeError, AssertionError, Exception) as e:
-    st.error(f"Error configuring Gemini API. Is your API key set correctly in your .env file or Streamlit Secrets? Error: {e}")
+    st.error(f"Error configuring Gemini API. Is your API key set correctly? Error: {e}")
     st.stop()
-
 
 # --- Load College Database ---
 try:
@@ -59,21 +58,16 @@ KNOWLEDGE_DOCUMENTS = [
 ]
 
 # --- Gemini Core Function ---
-# --- Gemini Core Function ---
-# --- Gemini Core Function ---
 def get_gemini_response(user_text, chat_history, college_info):
     """Generates a response from the Gemini API."""
-    # New: Explicitly add the user's college to the context
     context = f"The user is a student at {college_info['college_name']}.\n\n"
 
-    # Check for health-related keywords before adding specific details
     health_keywords = ["doctor", "counselor", "appointment", "checkup", "sick", "health", "therapist", "medical"]
     if any(keyword in user_text.lower() for keyword in health_keywords):
         context += "RELEVANT COLLEGE INFO:\n"
         context += f"Counselor: {college_info['counselor_name']}, Location: {college_info['counselor_location']}, Phone: {college_info['counselor_phone']}\n"
         context += f"Doctor: {college_info['doctor_name']}, Location: {college_info['doctor_location']}, Phone: {college_info['doctor_phone']}\n\n"
 
-    # Check for general keywords
     for doc in KNOWLEDGE_DOCUMENTS:
         if any(word.lower() in user_text.lower() for word in doc["title"].split()):
             context += f"GENERAL INFO on '{doc['title']}': {doc['content']}\n"
@@ -172,6 +166,18 @@ with st.sidebar:
         st.session_state.username = ''
         st.session_state.college_info = None
         st.rerun()
+
+    # --- NEW: Added Contributors Section ---
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Contributed By")
+    st.sidebar.markdown("""
+    - Prashant Kumar
+    - Priyanshu Pandey
+    - Prabhleen Kaur
+    - Nikita Saini
+    - Nidhi
+    - Palak Goyal
+    """)
 
 if page == "Chat":
     st.header("How are you feeling today?")
