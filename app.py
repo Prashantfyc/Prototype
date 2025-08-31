@@ -1,7 +1,7 @@
 # app.py
 """
-Medico: Your Digital Mental Health Companion (v10.1 - Prototype Disclaimer)
-- Added a persistent warning in the sidebar to indicate prototype status.
+Medico: Your Digital Mental Health Companion (v11.0 - Gemini API Final)
+- Configured to run exclusively on the Google Gemini API.
 """
 import os
 import re
@@ -13,20 +13,22 @@ from datetime import datetime
 from dotenv import load_dotenv
 from streamlit_option_menu import option_menu
 import numpy as np
-from openai import OpenAI
+import google.generativeai as genai
 
 # --- Configuration & Setup ---
 load_dotenv()
 
-# --- Configure OpenAI Client ---
+# --- Configure Gemini API ---
 try:
-    # This will use the OPENAI_API_KEY from your .env file locally
-    # or from Streamlit Secrets when deployed.
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    OPENAI_MODEL = "gpt-4o-mini"
-except Exception as e:
-    st.error(f"Failed to configure OpenAI client. Is your API key set? Error: {e}")
+    # Locally, this will use the GEMINI_API_KEY from your .env file.
+    # When deployed on Streamlit Cloud, it uses the key from Secrets.
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
+    genai.configure(api_key=GEMINI_API_KEY)
+    gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+except (AttributeError, AssertionError, Exception) as e:
+    st.error(f"Error configuring Gemini API. Is your API key set correctly in your .env file or Streamlit Secrets? Error: {e}")
     st.stop()
+
 
 # --- Load College Database ---
 try:
@@ -56,33 +58,32 @@ KNOWLEDGE_DOCUMENTS = [
     {"title": "Dealing with Loneliness", "content": "Feeling lonely is common. Consider joining a student club, attending campus events, or volunteering to connect with others."},
 ]
 
-# --- OpenAI Core Function ---
-def get_openai_response(user_text, chat_history, college_info):
-    """Generates a response from the OpenAI API."""
+# --- Gemini Core Function ---
+def get_gemini_response(user_text, chat_history, college_info):
+    """Generates a response from the Gemini API."""
     context = "RELEVANT COLLEGE INFO:\n"
     context += f"Counselor: {college_info['counselor_name']}, Location: {college_info['counselor_location']}, Phone: {college_info['counselor_phone']}\n"
     context += f"Doctor: {college_info['doctor_name']}, Location: {college_info['doctor_location']}, Phone: {college_info['doctor_phone']}\n\n"
-    
+
     for doc in KNOWLEDGE_DOCUMENTS:
         if any(word.lower() in user_text.lower() for word in doc["title"].split()):
             context += f"GENERAL INFO on '{doc['title']}': {doc['content']}\n"
 
-    messages = [{"role": "system", "content": f"{SYSTEM_PROMPT}\n\n{context}"}]
-    
+    # Gemini uses a different format for history, building a prompt string
+    history_formatted = ""
     for message in chat_history[-4:]:
-        messages.append({"role": message["role"], "content": message["content"]})
-        
-    messages.append({"role": "user", "content": user_text})
-
+        role = "User" if message["role"] == "user" else "Model" # Gemini uses 'Model' for assistant
+        history_formatted += f"**{role}:** {message['content']}\n"
+    
+    prompt = (f"{SYSTEM_PROMPT}\n\n"
+              f"---CONTEXT---\n{context}\n\n"
+              f"---CONVERSATION HISTORY---\n{history_formatted}\n\n"
+              f"---NEW MESSAGE---\n**User:** {user_text}\n\n**Model:**")
     try:
-        response = client.chat.completions.create(
-            model=OPENAI_MODEL,
-            messages=messages,
-            temperature=0.7,
-        )
-        return response.choices[0].message.content
+        response = gemini_model.generate_content(prompt)
+        return response.text
     except Exception as e:
-        st.error(f"An error occurred with the OpenAI API: {e}")
+        st.error(f"An error occurred with the Gemini API: {e}")
         return "I'm having a little trouble connecting right now. Please try again in a moment."
 
 # --- Other Core Functions ---
@@ -191,7 +192,7 @@ if page == "Chat":
         else:
             with st.chat_message("assistant"):
                 with st.spinner("Medico is thinking..."):
-                    response = get_openai_response(prompt, st.session_state.messages, st.session_state.college_info)
+                    response = get_gemini_response(prompt, st.session_state.messages, st.session_state.college_info)
                     st.markdown(response)
             st.session_state.messages.append({"role": "assistant", "content": response})
 
@@ -240,11 +241,11 @@ elif page == "Achievements":
     st.write("---")
     badges = {
         "First Step": {"emoji": "👣", "desc": "Logged in for the first time.", "unlocked": True},
-        "Journalist I": {"emoji": "✍️", "desc": "Write your first journal entry.", "unlocked": user_stats["journal_entries"] >= 1},
-        "Reflective Writer": {"emoji": "📖", "desc": "Write 5 journal entries.", "unlocked": user_stats["journal_entries"] >= 5},
-        "Mindful Observer I": {"emoji": "🧘", "desc": "Log your mood for the first time.", "unlocked": user_stats["mood_logs"] >= 1},
-        "Consistent Check-in": {"emoji": "🗓️", "desc": "Log your mood 5 times.", "unlocked": user_stats["mood_logs"] >= 5},
-        "Wellness Champion": {"emoji": "🥇", "desc": "Log your mood 10 times.", "unlocked": user_stats["mood_logs"] >= 10},
+        "Journalist I": {"emoji": "✍️", "desc": "Write your first journal entry.", "unlocked": user_stats.get("journal_entries", 0) >= 1},
+        "Reflective Writer": {"emoji": "📖", "desc": "Write 5 journal entries.", "unlocked": user_stats.get("journal_entries", 0) >= 5},
+        "Mindful Observer I": {"emoji": "🧘", "desc": "Log your mood for the first time.", "unlocked": user_stats.get("mood_logs", 0) >= 1},
+        "Consistent Check-in": {"emoji": "🗓️", "desc": "Log your mood 5 times.", "unlocked": user_stats.get("mood_logs", 0) >= 5},
+        "Wellness Champion": {"emoji": "🥇", "desc": "Log your mood 10 times.", "unlocked": user_stats.get("mood_logs", 0) >= 10},
     }
     cols = st.columns(3)
     col_index = 0

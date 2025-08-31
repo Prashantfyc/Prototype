@@ -4,4 +4,4 @@ plotly-express
 python-dotenv
 streamlit-option-menu
 numpy
-openai
+google-generativeai
