@@ -171,9 +171,9 @@ with st.sidebar:
     st.sidebar.markdown("---")
     st.sidebar.subheader("Contributed By")
     st.sidebar.markdown("""
+    - Prabhleen Kaur                        
     - Prashant Kumar
     - Priyanshu Pandey
-    - Prabhleen Kaur
     - Nikita Saini
     - Nidhi
     - Palak Goyal
