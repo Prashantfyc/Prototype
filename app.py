@@ -18,7 +18,7 @@ import numpy as np
 
 # --- Configuration & Setup ---
 load_dotenv()
-OLLAMA_MODEL = "llama3:8b"
+OLLAMA_MODEL = "qwen:0.5b"
 
 # --- Load College Database (Simplified) ---
 try:
@@ -66,31 +66,6 @@ def get_ollama_response(user_text, chat_history, college_info):
         # Use json.dumps to safely handle special characters in the content
         content_json = json.dumps(message["content"])
         history_formatted += f'{{"role": "{role}", "content": {content_json}}}\n'
-
-    prompt = (f"{SYSTEM_PROMPT}\n\n"
-              f"{context}\n\n"
-              f"CONVERSATION HISTORY:\n{history_formatted}\n\n"
-              f"NEW MESSAGE:\nUser: {user_text}\n\nMedico:")
-    try:
-        response = requests.post(
-            "http://localhost:11434/api/generate",
-            json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False},
-            timeout=60
-        )
-        response.raise_for_status()
-        return response.json()["response"]
-    except requests.exceptions.RequestException as e:
-        st.error(f"Could not connect to Ollama. Is it running? Error: {e}")
-        return "I'm having trouble connecting to my brain right now. Please make sure Ollama is running."
-    
-    for doc in KNOWLEDGE_DOCUMENTS:
-        if any(word.lower() in user_text.lower() for word in doc["title"].split()):
-            context += f"GENERAL INFO on '{doc['title']}': {doc['content']}\n"
-
-    history_formatted = ""
-    for message in chat_history[-4:]:
-        role = "user" if message["role"] == "user" else "assistant"
-        history_formatted += f'{"role": "{role}", "content": "{message["content"]}"}\n'
 
     prompt = (f"{SYSTEM_PROMPT}\n\n"
               f"{context}\n\n"
