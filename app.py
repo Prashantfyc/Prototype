@@ -60,18 +60,20 @@ KNOWLEDGE_DOCUMENTS = [
 
 # --- Gemini Core Function ---
 # --- Gemini Core Function ---
+# --- Gemini Core Function ---
 def get_gemini_response(user_text, chat_history, college_info):
     """Generates a response from the Gemini API."""
-    context = ""
+    # New: Explicitly add the user's college to the context
+    context = f"The user is a student at {college_info['college_name']}.\n\n"
 
-    # New: Check for health-related keywords before adding college info
+    # Check for health-related keywords before adding specific details
     health_keywords = ["doctor", "counselor", "appointment", "checkup", "sick", "health", "therapist", "medical"]
     if any(keyword in user_text.lower() for keyword in health_keywords):
         context += "RELEVANT COLLEGE INFO:\n"
         context += f"Counselor: {college_info['counselor_name']}, Location: {college_info['counselor_location']}, Phone: {college_info['counselor_phone']}\n"
         context += f"Doctor: {college_info['doctor_name']}, Location: {college_info['doctor_location']}, Phone: {college_info['doctor_phone']}\n\n"
 
-    # Check for general keywords (this part is unchanged)
+    # Check for general keywords
     for doc in KNOWLEDGE_DOCUMENTS:
         if any(word.lower() in user_text.lower() for word in doc["title"].split()):
             context += f"GENERAL INFO on '{doc['title']}': {doc['content']}\n"
