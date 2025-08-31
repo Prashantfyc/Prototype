@@ -1,88 +1,119 @@
 # app.py
 """
-Medico: Your Digital Mental Health Companion (v6.0 - Gamification)
-- Added 'Achievements' page to track usage and award badges.
+Medico: Your Digital Mental Health Companion (v8.3 - Complete Code)
+- Corrected CSV data format and Python loading logic to fix dropdown menu.
+- Complete and unredacted final version.
 """
 import os
 import re
 import json
+import requests
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 from datetime import datetime
 from dotenv import load_dotenv
-import google.generativeai as genai
 from streamlit_option_menu import option_menu
 import numpy as np
 
 # --- Configuration & Setup ---
 load_dotenv()
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+OLLAMA_MODEL = "llama3:8b"
 
-# --- Gemini Integration & AI Functions ---
-model = genai.GenerativeModel('gemini-1.5-flash')
-SYSTEM_PROMPT = """You are Medico, a supportive, empathetic, and non-judgmental digital companion... (rest of prompt is unchanged)"""
+# --- Load College Database (Simplified) ---
+try:
+    colleges_df = pd.read_csv("colleges_db.csv")
+    COLLEGE_LIST = colleges_df["college_name"].tolist()
+except FileNotFoundError:
+    st.error("Fatal Error: `colleges_db.csv` not found. Please create it.")
+    st.stop()
+
+# --- System Prompt & Static Knowledge Base ---
+SYSTEM_PROMPT = """You are Medico, a supportive, empathetic, and proactive wellness coach. Your purpose is to provide a safe space and help students build healthy habits.
+
+Your core roles are:
+1.  **Listen and Support:** Act as a non-judgmental companion. Use the provided context (college info, conversation history) to be helpful.
+2.  **Identify Opportunities:** If a user mentions a recurring problem (e.g., stress, procrastination, feeling overwhelmed) over several messages, or expresses a desire to change, identify this as an opportunity to help.
+3.  **Propose Action Plans:** Proactively offer to create a simple, manageable action plan.
+    - **Always ask for permission first.** (e.g., "It sounds like managing time is a real challenge right now. Would you be open to creating a small, simple plan to tackle it?")
+    - **If they agree, suggest a SMART goal.** The goal should be Specific, Measurable, Achievable, Relevant, and Time-bound. (e.g., "For the next two days, how about we try using the Pomodoro Technique for just one 25-minute study session? I can remind you if you'd like.")
+    - **Keep it simple.** Focus on one small habit at a time.
+
+- **Boundaries:** You MUST use the specific college details provided. You are NOT a therapist. NEVER give diagnoses or medical advice.
+"""
 
 KNOWLEDGE_DOCUMENTS = [
-    {"title": "On-Campus Doctor", "content": "..."},
-    {"title": "Campus Counseling Center", "content": "..."},
-    {"title": "Emergency Services", "content": "..."},
-    {"title": "Exam Stress Tips", "content": "..."},
-    {"title": "Dealing with Loneliness", "content": "..."},
-    {"title": "Self-Care Strategies", "content": "..."},
-] # Redacted for brevity
+    {"title": "Emergency Services", "content": "If you or someone you know is in immediate danger or a crisis, please don't wait. Call the National Emergency Helpline at 112 or your local emergency number."},
+    {"title": "Exam Stress Tips", "content": "Feeling overwhelmed by exams is normal. Techniques like the Pomodoro method, staying hydrated, and getting enough sleep can help manage pressure."},
+    {"title": "Dealing with Loneliness", "content": "Feeling lonely is common. Consider joining a student club, attending campus events, or volunteering to connect with others."},
+]
 
-def find_best_match(query, documents):
-    # (Function is unchanged)
-    try:
-        query_embedding = genai.embed_content(model='models/embedding-001', content=query, task_type="RETRIEVAL_QUERY")["embedding"]
-        doc_embeddings = genai.embed_content(model='models/embedding-001', content=[doc['content'] for doc in documents], task_type="RETRIEVAL_DOCUMENT")["embedding"]
-        products = np.dot(np.array(doc_embeddings), np.array(query_embedding))
-        index = np.argmax(products)
-        CONFIDENCE_THRESHOLD = 0.65
-        return documents[index] if products[index] > CONFIDENCE_THRESHOLD else None
-    except Exception as e:
-        st.error(f"Error finding relevant information: {e}")
-        return None
-
-def analyze_sentiment(text):
-    # (Function is unchanged)
-    try:
-        prompt = f"""Analyze the sentiment of the following user message. Classify it as one of the following: "Positive", "Negative", "Anxious", "Neutral", or "Crisis-level Distress". Message: "{text}" Sentiment:"""
-        response = model.generate_content(prompt)
-        sentiment = response.text.strip().replace('"', '')
-        return sentiment
-    except Exception as e:
-        st.warning(f"Sentiment analysis failed: {e}")
-        return "Neutral"
-
-def get_gemini_response(user_text, chat_history):
-    # (Function is unchanged)
-    sentiment = analyze_sentiment(user_text)
-    relevant_doc = find_best_match(user_text, KNOWLEDGE_DOCUMENTS)
+# --- AI & Core Functions ---
+def get_ollama_response(user_text, chat_history, college_info):
+    """Generates a response from the local Ollama model, now with college-specific context."""
     context = ""
-    if relevant_doc:
-        context += f"Relevant Info from '{relevant_doc['title']}': {relevant_doc['content']}\n"
-    context += f"The user's current sentiment appears to be: {sentiment}."
+    context += "RELEVANT COLLEGE INFO:\n"
+    context += f"Counselor: {college_info['counselor_name']}, Location: {college_info['counselor_location']}, Phone: {college_info['counselor_phone']}\n"
+    context += f"Doctor: {college_info['doctor_name']}, Location: {college_info['doctor_location']}, Phone: {college_info['doctor_phone']}\n\n"
+    
+    for doc in KNOWLEDGE_DOCUMENTS:
+        if any(word.lower() in user_text.lower() for word in doc["title"].split()):
+            context += f"GENERAL INFO on '{doc['title']}': {doc['content']}\n"
+
     history_formatted = ""
     for message in chat_history[-4:]:
-        role = "User" if message["role"] == "user" else "Medico"
-        history_formatted += f'{role}: {message["content"]}\n'
-    prompt = (f"{SYSTEM_PROMPT}\n\nCONTEXT FOR YOUR RESPONSE:\n{context}\n\nCONVERSATION HISTORY (summary):\n{history_formatted}\n\nNEW MESSAGE:\nUser: {user_text}\n\nMedico:")
-    try:
-        response = model.generate_content(prompt)
-        return response.text
-    except Exception as e:
-        st.error(f"An error occurred with the AI model: {e}")
-        return "I'm having a little trouble connecting right now. Please try again in a moment."
+        role = "user" if message["role"] == "user" else "assistant"
+        # Use json.dumps to safely handle special characters in the content
+        content_json = json.dumps(message["content"])
+        history_formatted += f'{{"role": "{role}", "content": {content_json}}}\n'
 
+    prompt = (f"{SYSTEM_PROMPT}\n\n"
+              f"{context}\n\n"
+              f"CONVERSATION HISTORY:\n{history_formatted}\n\n"
+              f"NEW MESSAGE:\nUser: {user_text}\n\nMedico:")
+    try:
+        response = requests.post(
+            "http://localhost:11434/api/generate",
+            json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False},
+            timeout=60
+        )
+        response.raise_for_status()
+        return response.json()["response"]
+    except requests.exceptions.RequestException as e:
+        st.error(f"Could not connect to Ollama. Is it running? Error: {e}")
+        return "I'm having trouble connecting to my brain right now. Please make sure Ollama is running."
+    
+    for doc in KNOWLEDGE_DOCUMENTS:
+        if any(word.lower() in user_text.lower() for word in doc["title"].split()):
+            context += f"GENERAL INFO on '{doc['title']}': {doc['content']}\n"
+
+    history_formatted = ""
+    for message in chat_history[-4:]:
+        role = "user" if message["role"] == "user" else "assistant"
+        history_formatted += f'{"role": "{role}", "content": "{message["content"]}"}\n'
+
+    prompt = (f"{SYSTEM_PROMPT}\n\n"
+              f"{context}\n\n"
+              f"CONVERSATION HISTORY:\n{history_formatted}\n\n"
+              f"NEW MESSAGE:\nUser: {user_text}\n\nMedico:")
+    try:
+        response = requests.post(
+            "http://localhost:11434/api/generate",
+            json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False},
+            timeout=60
+        )
+        response.raise_for_status()
+        return response.json()["response"]
+    except requests.exceptions.RequestException as e:
+        st.error(f"Could not connect to Ollama. Is it running? Error: {e}")
+        return "I'm having trouble connecting to my brain right now. Please make sure Ollama is running."
+
+CRISIS_KEYWORDS = ["kill myself", "end my life", "want to die", "suicide", "hurt myself", "self harm"]
 def detect_crisis(text: str) -> bool:
-    # (Function is unchanged)
     text_lower = text.lower()
-    return any(keyword in text_lower for keyword in ["kill myself", "end my life", "want to die", "suicide", "hurt myself", "self harm"])
+    return any(keyword in text_lower for keyword in CRISIS_KEYWORDS)
 
 def log_event(filename, data):
-    # (Function is unchanged)
     try:
         df = pd.DataFrame([data])
         os.makedirs(os.path.dirname(filename), exist_ok=True)
@@ -90,9 +121,8 @@ def log_event(filename, data):
     except Exception as e:
         st.error(f"Failed to log event: {e}")
 
-# --- New: Gamification Functions ---
+# --- Gamification Functions ---
 def load_user_stats(stats_file):
-    """Loads user stats from a JSON file, creating it if it doesn't exist."""
     if os.path.exists(stats_file):
         with open(stats_file, 'r') as f:
             return json.load(f)
@@ -100,100 +130,107 @@ def load_user_stats(stats_file):
         return {"mood_logs": 0, "journal_entries": 0}
 
 def save_user_stats(stats_file, stats):
-    """Saves user stats to a JSON file."""
     os.makedirs(os.path.dirname(stats_file), exist_ok=True)
     with open(stats_file, 'w') as f:
         json.dump(stats, f)
 
 def increment_stat(stats_file, stat_name):
-    """Loads, increments, and saves a specific user stat."""
     stats = load_user_stats(stats_file)
     stats[stat_name] = stats.get(stat_name, 0) + 1
     save_user_stats(stats_file, stats)
 
-# --- UI Configuration & Styling ---
+# --- UI & Main App Logic ---
 st.set_page_config(page_title="Medico", layout="wide", page_icon="🩺")
-
 st.markdown("""
 <style>
-    /* (CSS is unchanged, redacted for brevity) */
+    /* --- Base App Style --- */
     .stApp { background-color: #1E1E2E; color: #CDD6F4; }
     h1, h2, h3, h4, h5, h6 { color: #CDD6F4; }
+    /* --- Sidebar Style --- */
     [data-testid="stSidebar"] { background-color: #181825; border-right: 1px solid #313244; }
+    /* --- Chat Bubbles Style --- */
     .st-emotion-cache-1c7y2kd { background-color: #89B4FA; border-radius: 20px 20px 5px 20px; color: #1E1E2E; align-self: flex-end; max-width: 70%; }
     .st-emotion-cache-4k6c3l { background-color: #313244; border-radius: 20px 20px 20px 5px; color: #CDD6F4; align-self: flex-start; max-width: 70%; }
+    /* --- Chat Input Box Style --- */
     [data-testid="stChatInput"] { background-color: #181825; border-top: 1px solid #313244; }
     [data-testid="stChatInput"] input { color: #CDD6F4; }
+    /* --- Button & Widget Style --- */
     .stButton>button { background-color: #89B4FA; color: #1E1E2E; border: none; border-radius: 8px; }
     .stButton>button:hover { background-color: #74C7EC; color: #1E1E2E; }
-    /* New styles for achievement badges */
+    /* --- Achievement Badges --- */
     .badge-unlocked { border: 2px solid #89B4FA; background-color: #313244; padding: 15px; border-radius: 10px; text-align: center; }
     .badge-locked { border: 2px solid #45475A; background-color: #181825; padding: 15px; border-radius: 10px; text-align: center; opacity: 0.6; }
     .badge-emoji { font-size: 40px; }
     .badge-title { font-size: 18px; font-weight: bold; color: #CDD6F4; }
     .badge-desc { font-size: 14px; color: #BAC2DE; }
 </style>
-""", unsafe_allow_html=True)
+""", unsafe_allow_html=True) 
 
-
-# --- Main App Logic ---
-if 'logged_in' not in st.session_state:
-    st.session_state.logged_in = False
-if 'username' not in st.session_state:
-    st.session_state.username = ''
+if 'logged_in' not in st.session_state: st.session_state.logged_in = False
+if 'username' not in st.session_state: st.session_state.username = ''
+if 'college_info' not in st.session_state: st.session_state.college_info = None
 
 if not st.session_state.logged_in:
     st.title("Welcome to Medico 🩺")
     st.write("Your personal mental health companion.")
     with st.form("login_form"):
-        username = st.text_input("Please enter your name to begin")
+        username = st.text_input("Please enter your name")
+        college = st.selectbox("Select your college", COLLEGE_LIST)
         submitted = st.form_submit_button("Start Session")
-        if submitted and username:
+        if submitted and username and college:
             st.session_state.logged_in = True
             st.session_state.username = username
+            st.session_state.college_info = colleges_df[colleges_df["college_name"] == college].iloc[0].to_dict()
             st.rerun()
     st.stop()
 
-# --- Main Application (after login) ---
-USER_DATA_DIR = f"user_data/{st.session_state.username}"
+USER_DATA_DIR = f"user_data/{st.session_state.college_info['college_name']}/{st.session_state.username}"
 STATS_FILE = f"{USER_DATA_DIR}/stats.json"
 MOOD_LOG_FILE = f"{USER_DATA_DIR}/mood_log.csv"
 JOURNAL_FILE = f"{USER_DATA_DIR}/journal_entries.csv"
 
 with st.sidebar:
     st.title(f"Hi, {st.session_state.username}!")
-    st.write("Your friendly mental health companion.")
+    st.write(f"_{st.session_state.college_info['college_name']}_")
     page = option_menu(
         None, ["Chat", "Journal", "Mood Tracker", "Achievements", "Guided Exercises", "Resources"],
         icons=['chat-dots-fill', 'pencil-square', 'graph-up-arrow', 'trophy-fill', 'activity', 'info-circle-fill'],
-        menu_icon="cast", default_index=0,
-        styles={"container": {"background-color": "#181825"}, "nav-link-selected": {"background-color": "#313244"}}
+        menu_icon="cast", default_index=0
     )
     if st.button("Logout"):
         st.session_state.logged_in = False
         st.session_state.username = ''
+        st.session_state.college_info = None
         st.rerun()
 
-# --- Page Content ---
 if page == "Chat":
-    # (Page content is unchanged, redacted for brevity)
     st.header("How are you feeling today?")
     if "messages" not in st.session_state:
         st.session_state.messages = [{"role": "assistant", "content": f"Hi {st.session_state.username}! I'm Medico. What's on your mind?"}]
+
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
+
     if prompt := st.chat_input("Type your message here..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
+        
         if detect_crisis(prompt):
-            crisis_response = ( "..." )
-            # (crisis response logic)
+            crisis_response = (
+                "🚨 It sounds like you are going through a very difficult time. **Your safety is the most important thing.** "
+                "Please reach out to a professional right now. You are not alone.\n\n"
+                "- **National Emergency Helpline:** 112\n\n"
+                "Help is available, and there are people who want to support you."
+            )
+            with st.chat_message("assistant"):
+                st.warning(crisis_response)
+            st.session_state.messages.append({"role": "assistant", "content": crisis_response})
         else:
             with st.chat_message("assistant"):
                 with st.spinner("Medico is thinking..."):
-                    response = get_gemini_response(prompt, st.session_state.messages)
+                    response = get_ollama_response(prompt, st.session_state.messages, st.session_state.college_info)
                     st.markdown(response)
             st.session_state.messages.append({"role": "assistant", "content": response})
 
@@ -204,12 +241,11 @@ elif page == "Journal":
     if st.button("Save Entry"):
         if journal_entry:
             log_event(JOURNAL_FILE, {"timestamp": datetime.utcnow().isoformat(), "entry": journal_entry})
-            increment_stat(STATS_FILE, "journal_entries") # Increment stat
+            increment_stat(STATS_FILE, "journal_entries")
             st.success("Your journal entry has been saved!")
             st.rerun()
         else:
             st.warning("Please write something before saving.")
-    # (Past entries logic is unchanged)
     if os.path.exists(JOURNAL_FILE):
         st.write("---")
         st.subheader("Past Entries")
@@ -224,9 +260,8 @@ elif page == "Mood Tracker":
     mood_score = st.slider("Rate your mood (1 = Very Down, 10 = Excellent)", 1, 10, 5)
     if st.button("Log My Mood"):
         log_event(MOOD_LOG_FILE, {"timestamp": datetime.utcnow().isoformat(), "mood_score": mood_score})
-        increment_stat(STATS_FILE, "mood_logs") # Increment stat
+        increment_stat(STATS_FILE, "mood_logs")
         st.success(f"Mood logged as {mood_score}/10. Keep it up!")
-    # (Mood graph logic is unchanged)
     if os.path.exists(MOOD_LOG_FILE):
         st.write("---")
         st.subheader("Your Mood Over Time")
@@ -240,11 +275,8 @@ elif page == "Mood Tracker":
 elif page == "Achievements":
     st.header("🏆 Your Achievements")
     st.write("Celebrate your progress! Every step you take for your well-being is a victory.")
-    
     user_stats = load_user_stats(STATS_FILE)
     st.write("---")
-
-    # Define all possible badges
     badges = {
         "First Step": {"emoji": "👣", "desc": "Logged in for the first time.", "unlocked": True},
         "Journalist I": {"emoji": "✍️", "desc": "Write your first journal entry.", "unlocked": user_stats["journal_entries"] >= 1},
@@ -253,8 +285,6 @@ elif page == "Achievements":
         "Consistent Check-in": {"emoji": "🗓️", "desc": "Log your mood 5 times.", "unlocked": user_stats["mood_logs"] >= 5},
         "Wellness Champion": {"emoji": "🥇", "desc": "Log your mood 10 times.", "unlocked": user_stats["mood_logs"] >= 10},
     }
-
-    # Display badges in columns
     cols = st.columns(3)
     col_index = 0
     for title, data in badges.items():
@@ -267,11 +297,10 @@ elif page == "Achievements":
                 <div class="badge-desc">{data["desc"]}</div>
             </div>
             """, unsafe_allow_html=True)
-            st.write("") # Add space
+            st.write("")
         col_index += 1
 
 elif page == "Guided Exercises":
-    # (Page content is unchanged, redacted for brevity)
     st.header("🧘 Guided Exercises")
     st.write("Take a moment for yourself with these short, guided exercises.")
     st.subheader("5-Minute Calming Breathing Exercise")
@@ -280,7 +309,6 @@ elif page == "Guided Exercises":
     st.video("https://www.youtube.com/watch?v=O-6f5wQXSu8")
 
 elif page == "Resources":
-    # (Page content is unchanged, redacted for brevity)
     st.header("📚 Wellness Resources")
     st.write("Here are some university-approved resources to support you.")
     for doc in KNOWLEDGE_DOCUMENTS:
@@ -288,5 +316,3 @@ elif page == "Resources":
         if "Emergency" in doc["title"]: st.error(doc["content"])
         elif "Counseling" in doc["title"] or "Doctor" in doc["title"]: st.info(doc["content"])
         else: st.success(doc["content"])
-
-st.caption("Disclaimer: Medico is an AI prototype for hackathon demonstration...")

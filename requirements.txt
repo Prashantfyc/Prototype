@@ -1,7 +1,7 @@
 streamlit
-google-generativeai
 pandas
 plotly-express
 python-dotenv
 streamlit-option-menu
 numpy
+requests
