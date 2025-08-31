@@ -59,20 +59,26 @@ KNOWLEDGE_DOCUMENTS = [
 ]
 
 # --- Gemini Core Function ---
+# --- Gemini Core Function ---
 def get_gemini_response(user_text, chat_history, college_info):
     """Generates a response from the Gemini API."""
-    context = "RELEVANT COLLEGE INFO:\n"
-    context += f"Counselor: {college_info['counselor_name']}, Location: {college_info['counselor_location']}, Phone: {college_info['counselor_phone']}\n"
-    context += f"Doctor: {college_info['doctor_name']}, Location: {college_info['doctor_location']}, Phone: {college_info['doctor_phone']}\n\n"
+    context = ""
 
+    # New: Check for health-related keywords before adding college info
+    health_keywords = ["doctor", "counselor", "appointment", "checkup", "sick", "health", "therapist", "medical"]
+    if any(keyword in user_text.lower() for keyword in health_keywords):
+        context += "RELEVANT COLLEGE INFO:\n"
+        context += f"Counselor: {college_info['counselor_name']}, Location: {college_info['counselor_location']}, Phone: {college_info['counselor_phone']}\n"
+        context += f"Doctor: {college_info['doctor_name']}, Location: {college_info['doctor_location']}, Phone: {college_info['doctor_phone']}\n\n"
+
+    # Check for general keywords (this part is unchanged)
     for doc in KNOWLEDGE_DOCUMENTS:
         if any(word.lower() in user_text.lower() for word in doc["title"].split()):
             context += f"GENERAL INFO on '{doc['title']}': {doc['content']}\n"
 
-    # Gemini uses a different format for history, building a prompt string
     history_formatted = ""
     for message in chat_history[-4:]:
-        role = "User" if message["role"] == "user" else "Model" # Gemini uses 'Model' for assistant
+        role = "User" if message["role"] == "user" else "Model"
         history_formatted += f"**{role}:** {message['content']}\n"
     
     prompt = (f"{SYSTEM_PROMPT}\n\n"
