@@ -1,0 +1,9 @@
+# Ignore Python virtual environments
+venv/
+.venv/
+
+# Ignore environment variables file
+.env
+
+# Ignore user data
+user_data/
