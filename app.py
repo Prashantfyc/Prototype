@@ -1,11 +1,6 @@
 # app.py
 """
-Medico: Digital Mental Health Companion (v12.0)
-- Added comprehensive user profiling with emotional context
-- Implemented emotion detection and personalized AI responses
-- Enhanced UI with beautiful custom styling and animations
-- Added response length moderation based on user profile
-- Created stunning hackathon-worthy interface
+Medico: Digital Mental Health Companion 
 """
 
 import os
